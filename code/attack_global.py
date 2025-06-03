@@ -232,6 +232,7 @@ def Attack_Global(
 Attack_Global(
     "resnet50",
     0,
+    "/content/models/256x256_diffusion_uncond.pt",
     "ddim50",
     t=3,
     eps=16,
