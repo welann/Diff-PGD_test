@@ -4,7 +4,7 @@
 import random
 import torch
 import os
-from advertorch.attacks import LinfPGDAttack
+# from advertorch.attacks import LinfPGDAttack
 import torchvision.models as models
 # from torchvision.models import VGG19_Weights
 import torch.nn.functional as F
@@ -32,16 +32,16 @@ def gen_mask(x, type, ratio):
             mask[b][:, x_s:x_s+m_h, y_s:y_s+m_w] = 0
     return mask
 
-def gen_pgd_sample(net, x, iter=10, eps=32, alpha=2):
-    adversary = LinfPGDAttack(net, loss_fn=torch.nn.CrossEntropyLoss(reduction="sum"), 
-                                  eps=eps/255,
-                                  nb_iter=iter, 
-                                  eps_iter=alpha/255, 
-                                  rand_init=False, 
-                                  targeted=False
-                                )
-    y = net(x).argmax(1)
-    return adversary.perturb(x, y)
+# def gen_pgd_sample(net, x, iter=10, eps=32, alpha=2):
+#     adversary = LinfPGDAttack(net, loss_fn=torch.nn.CrossEntropyLoss(reduction="sum"), 
+#                                   eps=eps/255,
+#                                   nb_iter=iter, 
+#                                   eps_iter=alpha/255, 
+#                                   rand_init=False, 
+#                                   targeted=False
+#                                 )
+#     y = net(x).argmax(1)
+#     return adversary.perturb(x, y)
 
 
 class wrapper(torch.nn.Module):
@@ -54,30 +54,30 @@ class wrapper(torch.nn.Module):
             return self.net(x_unmasked*self.mask + self.x_masked)
         
 
-def gen_region_pgd_sample(net, x, region_mask, iter=10, eps=16, alpha=2):
+# def gen_region_pgd_sample(net, x, region_mask, iter=10, eps=16, alpha=2):
     
     
-    x_unmasked = x * region_mask
-    x_masked   = x.detach() * (1 - region_mask)
+#     x_unmasked = x * region_mask
+#     x_masked   = x.detach() * (1 - region_mask)
 
         
-    net = wrapper(net, x_masked, region_mask)
+#     net = wrapper(net, x_masked, region_mask)
 
   
-    adversary = LinfPGDAttack(net, loss_fn=torch.nn.CrossEntropyLoss(reduction="sum"), 
-                                  eps=eps/255,
-                                  nb_iter=iter, 
-                                  eps_iter=alpha/255, 
-                                  rand_init=False, 
-                                  targeted=False
-                                )
-    y = net(x_masked + x_unmasked).argmax(1)
+#     adversary = LinfPGDAttack(net, loss_fn=torch.nn.CrossEntropyLoss(reduction="sum"), 
+#                                   eps=eps/255,
+#                                   nb_iter=iter, 
+#                                   eps_iter=alpha/255, 
+#                                   rand_init=False, 
+#                                   targeted=False
+#                                 )
+#     y = net(x_masked + x_unmasked).argmax(1)
 
 
 
-    result = region_mask * adversary.perturb(x_unmasked, y) + x_masked
+    # result = region_mask * adversary.perturb(x_unmasked, y) + x_masked
 
-    return result
+    # return result
 
 
 
