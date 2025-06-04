@@ -131,6 +131,70 @@ def generate_x_adv_denoised_v2(x, y, diffusion, model, classifier, pgd_conf, dev
     return x_adv.detach()
 
 
+@torch.no_grad()
+def generate_x_adv_denoised_v3_mirror_descent(
+    x, y, diffusion, model, classifier, pgd_conf, device, t
+):
+
+    net = Denoised_Classifier(diffusion, model, classifier, t)
+
+    delta = torch.zeros(x.shape).to(x.device)
+    delta.requires_grad_()  # 确保delta可以计算梯度
+
+    loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
+
+    eps = pgd_conf["eps"]
+    alpha = pgd_conf["alpha"]
+    iter = pgd_conf["iter"]
+
+    for pgd_iter_id in range(iter):
+
+        # 计算sdedit后的净化图像，并分离计算图以防止梯度流回扩散模型本身
+        # 这一步与原Diff-PGD逻辑保持一致，因为它利用了扩散模型进行图像净化
+        x_diff = net.sdedit(x + delta, t).detach()
+
+        # 确保x_diff的梯度可以被计算，以便计算对抗性损失的梯度
+        x_diff.requires_grad_()
+
+        with torch.enable_grad():
+            # 计算对抗性损失，目标是最大化分类器的损失
+            loss = loss_fn(classifier(x_diff), y)
+
+            # 反向传播计算损失关于净化图像x_diff的梯度
+            loss.backward()
+
+            # 获取梯度的符号（或直接梯度，取决于PGD变体）
+            # 对于标准PGD通常使用梯度的符号方向
+            grad_direction = x_diff.grad.data.sign()
+
+        # 梯度更新步骤
+        # PGD的更新是 x_t+1 = Project(x_t + alpha * sign(grad))
+        # 在这里，delta是扰动，所以是 delta = Project(delta + alpha * sign(grad))
+        delta.data += grad_direction * alpha
+
+        # **修改为基于ℓ2范数的投影：**
+        # PGD使用ℓ∞投影，而典型的镜像梯度下降（当Bregman散度为平方欧几里得距离时）
+        # 则对应于ℓ2投影。
+        # 这里对整个扰动张量delta应用ℓ2范数限制。
+        # 如果delta的ℓ2范数超过eps，则将其缩放到eps
+        delta_norm = torch.norm(delta.data, p=2)
+        if delta_norm > eps:
+            delta.data = delta.data * (eps / delta_norm)
+
+        # 确保扰动后的图像像素值在有效范围内 [7]
+        # 这一步在PGD和Mirror Descent中都是常见的，以保持图像的有效性
+        x_adv_current = torch.clamp(x + delta, 0, 1)
+        # 更新delta以确保其始终是x_adv_current - x
+        # 这一步是关键，以确保delta始终代表从原始图像x到当前对抗样本x_adv_current的扰动
+        # 且满足像素值范围[7]
+        delta.data = x_adv_current - x
+
+    print("Done")
+
+    # 返回最终的对抗样本
+    return x_adv_current.detach()
+
+
 def Attack_Global(
     classifier,
     device,
@@ -186,6 +250,10 @@ def Attack_Global(
             x_adv = generate_x_adv_denoised_v2(
                 x, y_pred, diffusion, model, classifier, pgd_conf, device, t
             )
+        elif version == "v3":
+            x_adv = generate_x_adv_denoised_v3_mirror_descent(
+                x, y_pred, diffusion, model, classifier, pgd_conf, device, t
+            )
 
         cprint("time: {:.3}".format(time.time() - time_st), "g")
 
@@ -206,7 +274,12 @@ def Attack_Global(
 
         torch.save(pkg, save_path + f"{i}.bin")
         si(torch.cat([x, x_adv, pred_x0], -1), save_path + f"{i}.png")
-        print("y_pred, x_adv, pred_x0: ", y_pred, classifier(x_adv).argmax(1), classifier(pred_x0).argmax(1))
+        print(
+            "y_pred, x_adv, pred_x0: ",
+            y_pred,
+            classifier(x_adv).argmax(1),
+            classifier(pred_x0).argmax(1),
+        )
 
         c += 1
 
@@ -244,7 +317,7 @@ Attack_Global(
     iter=10,
     name="attack_global_gradpass",
     alpha=2,
-    version="v2",
+    version="v3",
 )
 # Attack_Global('resnet50', 0, 'ddim50', t=3, eps=16, iter=10, name='attack_global_gradpass', alpha=2)
 
