@@ -164,7 +164,8 @@ def Attack_Global(
 
     c = 0
 
-    for i in tqdm(range(dataset.__len__())):
+    # for i in tqdm(range(dataset.__len__())):
+    for i in range(1000):
         if i % skip != 0:
             continue
         time_st = time.time()
@@ -201,11 +202,11 @@ def Attack_Global(
             "x_adv_diff": pred_x0,
         }
 
-        print(x_adv.min(), x_adv.max(), (x - x_adv).abs().max())
+        print("x_adv: ", x_adv.min(), x_adv.max(), (x - x_adv).abs().max())
 
         torch.save(pkg, save_path + f"{i}.bin")
         si(torch.cat([x, x_adv, pred_x0], -1), save_path + f"{i}.png")
-        print(y_pred, classifier(x_adv).argmax(1), classifier(pred_x0).argmax(1))
+        print("y_pred, x_adv, pred_x0: ", y_pred, classifier(x_adv).argmax(1), classifier(pred_x0).argmax(1))
 
         c += 1
 

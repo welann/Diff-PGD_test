@@ -7,6 +7,7 @@ import torch.backends.cudnn as cudnn
 import torch.nn as nn
 
 from denoise import Denoiser
+from torchvision.models import resnet50, ResNet50_Weights
 
 from robustbench.utils import load_model
 
@@ -28,11 +29,11 @@ IMAGENET_MODEL_ROBUST = [
 def get_archs(arch, dataset='imagenet'):
     if dataset == 'imagenet':
         if   arch == 'resnet50':
-            model = torchvision.models.resnet50(pretrained=True)
+            model = torchvision.models.resnet50(weights = ResNet50_Weights.DEFAULT)
         
         elif arch == 'resnet101':
             model = torchvision.models.resnet101(pretrained=True)
-         
+        
         elif arch == 'resnet18':
             model = torchvision.models.resnet18(pretrained=True)
             
