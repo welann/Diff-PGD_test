@@ -7,7 +7,7 @@ import torch.backends.cudnn as cudnn
 import torch.nn as nn
 
 from denoise import Denoiser
-from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet50, ResNet50_Weights,ResNet101_Weights
 
 from robustbench.utils import load_model
 

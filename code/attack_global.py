@@ -195,6 +195,81 @@ def generate_x_adv_denoised_v3_mirror_descent(
     return x_adv_current.detach()
 
 
+@torch.no_grad()
+def generate_x_adv_denoised_v4(
+    x,
+    y,
+    diffusion,
+    model,
+    classifier,
+    pgd_conf,
+    device,
+    t,
+    use_full_grad: bool = False,  # 新参数：是否使用完整梯度而非符号梯度
+    momentum_beta: float = 0.0,  # 新参数：动量因子 (0.0 表示不使用动量)
+    alpha_decay_factor: float = 1.0,
+):  # 新参数：学习率衰减因子 (1.0 表示不衰减)
+
+    net = Denoised_Classifier(diffusion, model, classifier, t)
+
+    delta = torch.zeros(x.shape).to(x.device)
+    delta.requires_grad_()  # 确保 delta 可以被更新并跟踪操作（尽管此处梯度不回传至此）
+
+    loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
+
+    eps = pgd_conf["eps"]
+    alpha = pgd_conf["alpha"]
+    iter = pgd_conf["iter"]
+
+    # 初始化动量缓冲区
+    momentum_buffer = torch.zeros_like(delta.data)
+
+    for pgd_iter_id in range(iter):
+        # 计算当前迭代的步长 (应用衰减)
+        current_alpha = alpha * (alpha_decay_factor**pgd_iter_id)
+
+        # 核心：执行 SDEdit。这里的 .detach() 是实现“加速版 Diff-PGD v2”的关键。
+        # 它确保梯度只在 x_diff 及其下游（分类器）计算，而不回传通过 SDEdit 到 x + delta。
+        x_diff = net.sdedit(x + delta, t).detach()
+        x_diff.requires_grad_()  # 启用对 x_diff 的梯度计算
+
+        with torch.enable_grad():
+            loss = loss_fn(classifier(x_diff), y)
+            loss.backward()
+
+            # 获取损失对 x_diff 的梯度 (这对应于论文中的 ∇_x0_t loss)
+            grad = x_diff.grad.data
+
+            # 根据参数选择使用完整梯度或符号梯度
+            if use_full_grad:
+                update_direction = grad
+            else:
+                update_direction = grad.sign()
+
+        # 应用动量（如果启用）
+        if momentum_beta > 0:
+            # 动量更新公式：v = beta * v + (1 - beta) * g
+            momentum_buffer = (
+                momentum_beta * momentum_buffer + (1 - momentum_beta) * update_direction
+            )
+            update_term = momentum_buffer
+        else:
+            update_term = update_direction
+
+        # 更新扰动 delta
+        # 使用 .data 进行就地更新，避免创建新的计算图节点
+        delta.data += update_term * current_alpha
+
+        # 将 delta 投影回 L_inf 范数球
+        delta.data = torch.clamp(delta.data, -eps, eps)
+
+    print("Done")
+
+    # 生成最终的对抗样本，并裁剪到 [35] 范围
+    x_adv = torch.clamp(x + delta, 0, 1)
+    return x_adv.detach()  # 返回时也进行 detach，确保没有不必要的梯度信息
+
+
 def Attack_Global(
     classifier,
     device,
@@ -253,6 +328,20 @@ def Attack_Global(
         elif version == "v3":
             x_adv = generate_x_adv_denoised_v3_mirror_descent(
                 x, y_pred, diffusion, model, classifier, pgd_conf, device, t
+            )
+        elif version == "v4":
+            x_adv = generate_x_adv_denoised_v4(
+                x,
+                y_pred,
+                diffusion,
+                model,
+                classifier,
+                pgd_conf,
+                device,
+                t,
+                True,
+                0.9,
+                0.9,
             )
 
         cprint("time: {:.3}".format(time.time() - time_st), "g")
@@ -317,7 +406,7 @@ Attack_Global(
     iter=10,
     name="attack_global_gradpass",
     alpha=2,
-    version="v3",
+    version="v4",
 )
 # Attack_Global('resnet50', 0, 'ddim50', t=3, eps=16, iter=10, name='attack_global_gradpass', alpha=2)
 
