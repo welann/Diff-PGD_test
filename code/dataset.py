@@ -15,7 +15,7 @@ import torch
 # set this environment variable to the location of your imagenet directory if you want to read ImageNet data.
 # make sure your val directory is preprocessed to look like the train directory, e.g. by running this script
 # https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh
-os.environ["IMAGENET_LOC_ENV"] = "data/imagenet/"  # imagenet
+os.environ["IMAGENET_LOC_ENV"] = "/kaggle/working/tiny-imagenet-200/"  # imagenet
 os.environ["PT_DATA_DIR"] = "data/datasets/"  # cifar-10
 
 
@@ -163,7 +163,7 @@ def _imagenet(split: str) -> Dataset:
             ]
         )
     elif split == "test":
-        subdir = os.path.join(dir, "val")
+        subdir = os.path.join(dir, "val/images")
         transform = transforms.Compose(
             [
                 transforms.Resize(256),

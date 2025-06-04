@@ -157,7 +157,9 @@ def Attack_Global(
 
     dataset = get_dataset("imagenet", split="test")
 
-    model, diffusion = get_imagenet_dm_conf(device=device, respace=respace, model_path=model_path)
+    model, diffusion = get_imagenet_dm_conf(
+        device=device, respace=respace, model_path=model_path
+    )
 
     c = 0
 
