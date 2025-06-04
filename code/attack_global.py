@@ -403,7 +403,7 @@ Attack_Global(
     "ddim50",
     t=3,
     eps=16,
-    iter=10,
+    iter=20,
     name="attack_global_gradpass",
     alpha=2,
     version="v4",
