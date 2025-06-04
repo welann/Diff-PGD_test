@@ -6,7 +6,8 @@ import torchvision
 from tqdm.auto import tqdm
 import random
 from archs import get_archs, IMAGENET_MODEL
-from advertorch.attacks import LinfPGDAttack
+
+# from advertorch.attacks import LinfPGDAttack
 import matplotlib.pylab as plt
 import time
 import glob
@@ -74,23 +75,23 @@ class Denoised_Classifier(torch.nn.Module):
         return out
 
 
-def generate_x_adv_denoised(x, y, diffusion, model, classifier, pgd_conf, device, t):
+# def generate_x_adv_denoised(x, y, diffusion, model, classifier, pgd_conf, device, t):
 
-    net = Denoised_Classifier(diffusion, model, classifier, t)
+#     net = Denoised_Classifier(diffusion, model, classifier, t)
 
-    adversary = LinfPGDAttack(
-        net,
-        loss_fn=torch.nn.CrossEntropyLoss(reduction="sum"),
-        eps=pgd_conf["eps"],
-        nb_iter=pgd_conf["iter"],
-        eps_iter=pgd_conf["alpha"],
-        rand_init=True,
-        targeted=False,
-    )
+#     adversary = LinfPGDAttack(
+#         net,
+#         loss_fn=torch.nn.CrossEntropyLoss(reduction="sum"),
+#         eps=pgd_conf["eps"],
+#         nb_iter=pgd_conf["iter"],
+#         eps_iter=pgd_conf["alpha"],
+#         rand_init=True,
+#         targeted=False,
+#     )
 
-    x_adv = adversary.perturb(x, y)
+#     x_adv = adversary.perturb(x, y)
 
-    return x_adv
+#     return x_adv
 
 
 @torch.no_grad()
@@ -176,9 +177,10 @@ def Attack_Global(
         y_pred = classifier(x).argmax(1)  # original prediction
 
         if version == "v1":
-            x_adv = generate_x_adv_denoised(
-                x, y_pred, diffusion, model, classifier, pgd_conf, device, t
-            )
+            print("v1 not implemented")
+            # x_adv = generate_x_adv_denoised(
+            #     x, y_pred, diffusion, model, classifier, pgd_conf, device, t
+            # )
         elif version == "v2":
             x_adv = generate_x_adv_denoised_v2(
                 x, y_pred, diffusion, model, classifier, pgd_conf, device, t
