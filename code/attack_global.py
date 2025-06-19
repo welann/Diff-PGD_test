@@ -48,7 +48,7 @@ class Denoised_Classifier(torch.nn.Module):
 
         for i in indices:
 
-            # out = self.diffusion.ddim_sample(self.model, sample, t)
+            # out = self.diffusion.ddim_sample(self.model, sample, t) 
             out = self.diffusion.ddim_sample(
                 self.model, sample, torch.full((x.shape[0],), i).long().to(x.device)
             )

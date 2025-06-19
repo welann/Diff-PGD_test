@@ -4,7 +4,7 @@ https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0
 
 Docstrings have been added, as well as DDIM sampling and a new collection of beta schedules.
 """
-
+import os
 import enum
 import math
 
@@ -123,7 +123,7 @@ class GaussianDiffusion:
         model_var_type,
         loss_type,
         rescale_timesteps=False,
-        sigma_must_include=None
+        sigma_must_include=None,
     ):
         self.model_mean_type = model_mean_type
         self.model_var_type = model_var_type
@@ -402,7 +402,7 @@ class GaussianDiffusion:
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
-        return_all=False
+        return_all=False,
     ):
         """
         Sample x_{t-1} from the model at the given timestep.
@@ -421,6 +421,7 @@ class GaussianDiffusion:
                  - 'sample': a random sample from the model.
                  - 'pred_xstart': a prediction of x_0.
         """
+        print("p_sample function called")
         out = self.p_mean_variance(
             model,
             x,
@@ -440,7 +441,18 @@ class GaussianDiffusion:
         sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
         if return_all:
             return out
+        # todo 保存每次的sample图像
+        os.makedirs("sample_images", exist_ok=True)
+        th.save(sample, f"sample/sample_{t[0]}.pt")
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
+
+    # todo 添加分类器
+    # 这里应该返回的是处理完成的图像
+    def p_sample_with_classifier_and_mask(classifier_model, mask, x):
+        classifier_model.eval()
+        out = classifier_model(x)
+        print("classifier result: ", out)
+        return out
 
     def p_sample_loop(
         self,
@@ -548,7 +560,7 @@ class GaussianDiffusion:
         cond_fn=None,
         model_kwargs=None,
         eta=0.0,
-        return_all=False
+        return_all=False,
     ):
         """
         Sample x_{t-1} from the model using ƒ.
@@ -581,7 +593,7 @@ class GaussianDiffusion:
         noise = th.randn_like(x)
         mean_pred = (
             out["pred_xstart"] * th.sqrt(alpha_bar_prev)
-            + th.sqrt(1 - alpha_bar_prev - sigma ** 2) * eps
+            + th.sqrt(1 - alpha_bar_prev - sigma**2) * eps
         )
         nonzero_mask = (
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
@@ -590,13 +602,13 @@ class GaussianDiffusion:
         if return_all:
             return out
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
-    
+
     def ddim_sample_reconstruct(
         self,
         model,
         x,
         t,
-        clean_x, 
+        clean_x,
         mask,
         scale,
         clip_denoised=True,
@@ -604,7 +616,7 @@ class GaussianDiffusion:
         cond_fn=None,
         model_kwargs=None,
         eta=0.0,
-        return_all=False
+        return_all=False,
     ):
         """
         Sample x_{t-1} from the model using ƒ.
@@ -612,7 +624,7 @@ class GaussianDiffusion:
         Same usage as p_sample().
         """
         with th.enable_grad():
-            x.requires_grad=True
+            x.requires_grad = True
             out = self.p_mean_variance(
                 model,
                 x,
@@ -623,17 +635,14 @@ class GaussianDiffusion:
             )
             crit = th.nn.MSELoss()
             target = mask * clean_x
-            input = mask * out['pred_xstart']
+            input = mask * out["pred_xstart"]
             loss = crit(input, target)
             loss.backward()
             grad = x.grad.float()
-            
-            # out['pred_xstart'] =  out['pred_xstart'] -  out['variance'] * grad * scale
-            out['pred_xstart'] =  out['pred_xstart'] -  grad * scale
 
-        
-        
-        
+            # out['pred_xstart'] =  out['pred_xstart'] -  out['variance'] * grad * scale
+            out["pred_xstart"] = out["pred_xstart"] - grad * scale
+
         # Usually our model outputs epsilon, but we re-derive it
         # in case we used x_start or x_prev prediction.
         eps = self._predict_eps_from_xstart(x, t, out["pred_xstart"])
@@ -649,7 +658,7 @@ class GaussianDiffusion:
         noise = th.randn_like(x)
         mean_pred = (
             out["pred_xstart"] * th.sqrt(alpha_bar_prev)
-            + th.sqrt(1 - alpha_bar_prev - sigma ** 2) * eps
+            + th.sqrt(1 - alpha_bar_prev - sigma**2) * eps
         )
         nonzero_mask = (
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
