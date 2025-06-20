@@ -421,7 +421,7 @@ class GaussianDiffusion:
                  - 'sample': a random sample from the model.
                  - 'pred_xstart': a prediction of x_0.
         """
-        print("p_sample function called")
+        # print("p_sample function called")
         out = self.p_mean_variance(
             model,
             x,
@@ -441,9 +441,18 @@ class GaussianDiffusion:
         sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
         if return_all:
             return out
+
+        
+
         # todo 保存每次的sample图像
         os.makedirs("sample", exist_ok=True)
         th.save(sample, f"sample/sample_{t[0]}.pt")
+        
+        #todo 修改图像右上角区域为黑色
+        sample_copy = sample.clone()
+        sample_copy[:, :, 0:10, -10:] = 0 # Set top-right 10x10 to black
+        sample = sample_copy
+        th.save(sample, f"sample/sample_mask_{t[0]}.pt")
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
     # todo 添加分类器
