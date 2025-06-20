@@ -4,6 +4,7 @@ https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0
 
 Docstrings have been added, as well as DDIM sampling and a new collection of beta schedules.
 """
+
 import os
 import enum
 import math
@@ -442,17 +443,16 @@ class GaussianDiffusion:
         if return_all:
             return out
 
-        
-
         # todo 保存每次的sample图像
         os.makedirs("sample", exist_ok=True)
         th.save(sample, f"sample/sample_{t[0]}.pt")
-        
-        #todo 修改图像右上角区域为黑色
+
+        # todo 修改图像右上角区域为黑色
         sample_copy = sample.clone()
-        sample_copy[:, :, 0:10, -10:] = 0 # Set top-right 10x10 to black
+        sample_copy[:, :, 0:10, -10:] = 0  # Set top-right 10x10 to black
         sample = sample_copy
-        th.save(sample, f"sample/sample_mask_{t[0]}.pt")
+        os.makedirs("mask_sample", exist_ok=True)
+        th.save(sample, f"mask_sample/sample_{t[0]}.pt")
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
     # todo 添加分类器
