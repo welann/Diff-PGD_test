@@ -442,7 +442,7 @@ class GaussianDiffusion:
         if return_all:
             return out
         # todo 保存每次的sample图像
-        os.makedirs("sample_images", exist_ok=True)
+        os.makedirs("sample", exist_ok=True)
         th.save(sample, f"sample/sample_{t[0]}.pt")
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
