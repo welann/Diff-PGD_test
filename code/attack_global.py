@@ -31,13 +31,14 @@ class Denoised_Classifier(torch.nn.Module):
         x = x * 2 - 1
 
         t = torch.full((x.shape[0],), t).long().to(x.device)
-        print("x_t shape", x.shape)
+        print("sdedit x_t shape", x.shape)
         print("t shape", t.shape)
         print("=============")
         x_t = self.diffusion.q_sample(x, t)
 
         sample = x_t
-
+        print("sdedit sample shape", sample.shape)
+        print("=============")
         # print(x_t.min(), x_t.max())
 
         # si(x_t, 'vis/noised_x.png', to_01=True)
@@ -73,7 +74,11 @@ class Denoised_Classifier(torch.nn.Module):
     def forward(self, x):
 
         out = self.sdedit(x, self.t)  # [0, 1]
+        print("out1 shape", out.shape)
+        print("=============")
         out = self.classifier(out)
+        print("out2 shape", out.shape)
+        print("=============")
         return out
 
 
@@ -102,6 +107,8 @@ def generate_x_adv_denoised_v2(x, y, diffusion, model, classifier, pgd_conf, dev
     net = Denoised_Classifier(diffusion, model, classifier, t)
 
     delta = torch.zeros(x.shape).to(x.device)
+    print("delta shape", delta.shape)
+    print("=============")
     # delta.requires_grad_()
 
     loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
@@ -130,6 +137,8 @@ def generate_x_adv_denoised_v2(x, y, diffusion, model, classifier, pgd_conf, dev
     print("Done")
 
     x_adv = torch.clamp(x + delta, 0, 1)
+    print("x_adv shape", x_adv.shape)
+    print("=============")
     return x_adv.detach()
 
 
@@ -315,7 +324,9 @@ def Attack_Global(
         x, y = dataset[i]
         x = x[None,].to(device)
         y = torch.tensor(y)[None,].to(device)
-
+        print("first =============")
+        print("x shape", x.shape)
+        print("=============")
         y_pred = classifier(x).argmax(1)  # original prediction
 
         if version == "v1":
