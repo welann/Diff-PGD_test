@@ -15,6 +15,9 @@ import torch as th
 from .nn import mean_flat
 from .losses import normal_kl, discretized_gaussian_log_likelihood
 
+import torch.nn.functional as F
+from torchvision.models import resnet50, ResNet50_Weights,ResNet101_Weights
+
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
     """
@@ -198,6 +201,9 @@ class GaussianDiffusion:
         :param noise: if specified, the split-out normal noise.
         :return: A noisy version of x_start.
         """
+        print("q_sample function called")
+        print(x_start.shape)
+        print("=============")
         if noise is None:
             noise = th.randn_like(x_start)
         assert noise.shape == x_start.shape
@@ -455,13 +461,122 @@ class GaussianDiffusion:
         th.save(sample, f"mask_sample/sample_{t[0]}.pt")
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
-    # todo 添加分类器
-    # 这里应该返回的是处理完成的图像
-    def p_sample_with_classifier_and_mask(classifier_model, mask, x):
-        classifier_model.eval()
-        out = classifier_model(x)
-        print("classifier result: ", out)
-        return out
+    def version_v1():
+        return 0
+
+    def p_sample_with_classifier_and_mask(
+        self,
+        model,
+        x,
+        t,
+        clip_denoised=True,
+        denoised_fn=None,
+        cond_fn=None,
+        model_kwargs=None,
+        return_all=False,
+        version="v1",
+        classifier_model_list=[],
+        mask_list=[],
+        label_list=[],
+        pgd_conf=[],
+    ):
+        """
+        Sample x_{t-1} from the model at the given timestep, incorporating an
+        adversarial attack using PGD.
+
+        v1: 只使用一个分类器，生成pgd样本叠加在原图上
+        v2: 使用多个分类器，生成pgd样本叠加在原图上
+
+        v3：使用一个分类器，在后半程引导扩散模型生成的方向
+        v4：使用多个分类器，在后半程引导扩散模型生成的方向
+
+        """
+        pgd_epsilon = pgd_conf["eps"] if "eps" in pgd_conf else 0.06
+        pgd_alpha = pgd_conf["alpha"] if "alpha" in pgd_conf else 0.04
+        pgd_iter = pgd_conf["iter"] if "iter" in pgd_conf else 10
+
+        if version == "v1" or version == "v2":
+            # 先生成去噪后的图片, 相当于公式中的xt
+            out = self.p_mean_variance(
+                model,
+                x,
+                t,
+                clip_denoised=clip_denoised,
+                denoised_fn=denoised_fn,
+                model_kwargs=model_kwargs,
+            )
+            noise = th.randn_like(x)
+            nonzero_mask = (
+                (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
+            )  # no noise when t == 0
+            if cond_fn is not None:
+                out["mean"] = self.condition_mean(
+                    cond_fn, out, x, t, model_kwargs=model_kwargs
+                )
+            sample = (
+                out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
+            )
+
+            #! 保存每次的sample图像
+            os.makedirs("sample", exist_ok=True)
+            th.save(sample, f"sample/sample_{t[0]}.pt")
+
+            # 攻击条件判断，在进入一定阶段时才进行攻击
+            # todo 攻击开始就不停下来，和现在的[0.1,0.5]这个攻击区间有区别
+            if t[0] < self.num_timesteps * 0.5 and t[0] > self.num_timesteps * 0.1:
+                for batch_idx in range(sample.size(0)):
+                    # 初始化对抗样本
+                    z_t = (
+                        sample[batch_idx].unsqueeze(0).detach().clone()
+                    )  # 保持维度 [1,C,H,W]
+                    z_0 = z_t.clone()
+
+                    # 迭代扰动
+                    if t.min() > self.num_timesteps * 0:
+                        for _ in range(pgd_iter):
+                            # 前向分类
+                            z_t.requires_grad_(True)
+                            
+                            if version == "v1":
+                                classifier = classifier_model_list[0]
+                                with th.enable_grad():
+                                    logits = classifier(z_t)
+                                    pred_class = logits.argmax()
+                                    # 计算对抗梯度
+                                    loss = F.cross_entropy(
+                                        logits, label_list[batch_idx].unsqueeze(0)
+                                    )
+                                    classifier.zero_grad()
+                                    loss.backward()
+                                    grad_sign = z_t.grad.data.sign()
+
+                                delta += grad_sign * pgd_alpha
+                                delta = th.clamp(delta, -pgd_epsilon, pgd_epsilon)
+
+                                # 停止条件：分类错误
+                                if pred_class != label_list[batch_idx]:
+                                    print("attack success=========")
+                                    print(pred_class, label_list[batch_idx])
+                                    break
+
+                                z_t = th.clamp(z_t + delta, 0, 1)
+                            elif version == "v2":
+                                pass
+                            elif version == "v3":
+                                pass
+                            elif version == "v4":
+                                pass
+                            else:
+                                print("version error")
+                                break
+                    sample[batch_idx] = z_t
+                    os.makedirs("mask_sample", exist_ok=True)
+                    th.save(sample, f"mask_sample/sample_{t[0]}.pt")
+            
+            if return_all:
+                return out
+
+        return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
     def p_sample_loop(
         self,

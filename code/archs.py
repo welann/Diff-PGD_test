@@ -27,6 +27,7 @@ IMAGENET_MODEL_ROBUST = [
 
 
 def get_archs(arch, dataset='imagenet'):
+    #224x224
     if dataset == 'imagenet':
         if   arch == 'resnet50':
             model = torchvision.models.resnet50(weights = ResNet50_Weights.DEFAULT)

@@ -31,7 +31,9 @@ class Denoised_Classifier(torch.nn.Module):
         x = x * 2 - 1
 
         t = torch.full((x.shape[0],), t).long().to(x.device)
-
+        print("x_t shape", x.shape)
+        print("t shape", t.shape)
+        print("=============")
         x_t = self.diffusion.q_sample(x, t)
 
         sample = x_t
@@ -96,7 +98,7 @@ class Denoised_Classifier(torch.nn.Module):
 
 @torch.no_grad()
 def generate_x_adv_denoised_v2(x, y, diffusion, model, classifier, pgd_conf, device, t):
-
+    # x shape 224x224x3
     net = Denoised_Classifier(diffusion, model, classifier, t)
 
     delta = torch.zeros(x.shape).to(x.device)

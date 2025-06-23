@@ -76,6 +76,7 @@ def main():
         # classes = th.randint(
         #     low=0, high=NUM_CLASSES, size=(args.batch_size,), device=dist_util.dev()
         # )
+        # todo 修改为指定类别的物种，数字：类别 数据来自imagenet
         classes = th.full((args.batch_size,), 0, device=dist_util.dev())
         model_kwargs["y"] = classes
         sample_fn = (
