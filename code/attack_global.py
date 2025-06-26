@@ -34,6 +34,7 @@ class Denoised_Classifier(torch.nn.Module):
         print("sdedit x_t shape", x.shape)
         print("t shape", t.shape)
         print("=============")
+        # 把正常图像加噪声，得到x_t
         x_t = self.diffusion.q_sample(x, t)
 
         sample = x_t
