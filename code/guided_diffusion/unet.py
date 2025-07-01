@@ -18,6 +18,7 @@ from .nn import (
     timestep_embedding,
 )
 
+# from collections import OrderedDict
 
 class AttentionPool2d(nn.Module):
     """
@@ -468,6 +469,7 @@ class UNetModel(nn.Module):
         self.num_heads = num_heads
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
+        # self.attention_maps = OrderedDict() # add this line
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -633,7 +635,7 @@ class UNetModel(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
-    def forward(self, x, timesteps, y=None):
+    def forward(self, x, timesteps, y=None,return_attentions=False):
         """
         Apply the model to an input batch.
 
@@ -663,8 +665,32 @@ class UNetModel(nn.Module):
             h = module(h, emb)
         h = h.type(x.dtype)
         return self.out(h)
-
-
+#         # self.attention_maps = OrderedDict()
+        # idx = 0
+        # attention_maps = OrderedDict()
+        # for i, module in enumerate(self.input_blocks):
+        #     h = module(h, emb)
+        #     hs.append(h)
+        #     if isinstance(module, TimestepEmbedSequential):
+        #         for layer in module:
+        #             if isinstance(layer, AttentionBlock):
+        #                 attention_maps[f'input_blocks_{i}_{idx}'] = layer.attention.weight # save attention weights
+        #                 idx+=1
+        # h = self.middle_block(h, emb)
+        # attention_maps['middle_block'] = self.middle_block[1].attention.weight
+        # for i, module in enumerate(self.output_blocks):
+        #     h = th.cat([h, hs.pop()], dim=1)
+        #     h = module(h, emb)
+        #     if isinstance(module, TimestepEmbedSequential):
+        #         for layer in module:
+        #             if isinstance(layer, AttentionBlock):
+        #                 attention_maps[f'output_blocks_{i}_{idx}'] = layer.attention.weight # save attention weights
+        #                 idx+=1
+        # h = h.type(x.dtype)
+        # if return_attentions:
+        #     return self.out(h), attention_maps
+        # else:
+        #     return self.out(h)
 class SuperResModel(UNetModel):
     """
     A UNetModel that performs super-resolution.
