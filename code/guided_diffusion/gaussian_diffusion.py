@@ -16,7 +16,9 @@ from .nn import mean_flat
 from .losses import normal_kl, discretized_gaussian_log_likelihood
 
 import torch.nn.functional as F
-from torchvision.models import resnet50, ResNet50_Weights,ResNet101_Weights
+from torchvision.models import resnet50, ResNet50_Weights, ResNet101_Weights
+
+import torchvision.utils as vutils
 
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
@@ -201,9 +203,6 @@ class GaussianDiffusion:
         :param noise: if specified, the split-out normal noise.
         :return: A noisy version of x_start.
         """
-        print("q_sample function called")
-        print(x_start.shape)
-        print("=============")
         if noise is None:
             noise = th.randn_like(x_start)
         assert noise.shape == x_start.shape
@@ -449,16 +448,16 @@ class GaussianDiffusion:
         if return_all:
             return out
 
-        # todo 保存每次的sample图像
-        os.makedirs("sample", exist_ok=True)
-        th.save(sample, f"sample/sample_{t[0]}.pt")
+        # # todo 保存每次的sample图像
+        # os.makedirs("sample", exist_ok=True)
+        # th.save(sample, f"sample/sample_{t[0]}.pt")
 
-        # todo 修改图像右上角区域为黑色
-        sample_copy = sample.clone()
-        sample_copy[:, :, 0:10, -10:] = 0  # Set top-right 10x10 to black
-        sample = sample_copy
-        os.makedirs("mask_sample", exist_ok=True)
-        th.save(sample, f"mask_sample/sample_{t[0]}.pt")
+        # # todo 修改图像右上角区域为黑色
+        # sample_copy = sample.clone()
+        # sample_copy[:, :, 0:10, -10:] = 0  # Set top-right 10x10 to black
+        # sample = sample_copy
+        # os.makedirs("mask_sample", exist_ok=True)
+        # th.save(sample, f"mask_sample/sample_{t[0]}.pt")
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
     def version_v1():
@@ -471,7 +470,6 @@ class GaussianDiffusion:
         t,
         clip_denoised=True,
         denoised_fn=None,
-        cond_fn=None,
         model_kwargs=None,
         return_all=False,
         version="v1",
@@ -536,7 +534,7 @@ class GaussianDiffusion:
                         for _ in range(pgd_iter):
                             # 前向分类
                             z_t.requires_grad_(True)
-                            
+
                             if version == "v1":
                                 classifier = classifier_model_list[0]
                                 with th.enable_grad():
@@ -572,11 +570,60 @@ class GaussianDiffusion:
                     sample[batch_idx] = z_t
                     os.makedirs("mask_sample", exist_ok=True)
                     th.save(sample, f"mask_sample/sample_{t[0]}.pt")
-            
+
             if return_all:
                 return out
 
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
+
+    def attack_sample(
+        self,
+        model,
+        shape,
+        classifier_list=[],
+        noise=None,
+        clip_denoised=True,
+        denoised_fn=None,
+        cond_fn=None,
+        model_kwargs=None,
+        device=None,
+        progress=False,
+    ):
+        """
+        Generate samples from the model.
+
+        :param model: the model module.
+        :param shape: the shape of the samples, (N, C, H, W).
+        """
+        # if device is None:
+        #     device = next(model.parameters()).device
+        device = "cuda" if th.cuda.is_available() else "cpu"
+        img = noise if noise is not None else th.randn(*shape, device=device)
+        for i in range(self.num_timesteps - 1, -1, -1):
+            t = th.tensor([i] * shape[0], device=device)
+            with th.no_grad():
+                out = self.p_mean_variance(
+                    model,
+                    img,
+                    t,
+                    clip_denoised=clip_denoised,
+                    denoised_fn=denoised_fn,
+                    model_kwargs=model_kwargs,
+                )
+                noise = th.randn_like(img)
+                nonzero_mask = (
+                    (t != 0).float().view(-1, *([1] * (len(img.shape) - 1)))
+                )  # no noise when t == 0
+                if cond_fn is not None:
+                    out["mean"] = self.condition_mean(
+                        cond_fn, out, img, t, model_kwargs=model_kwargs
+                    )
+                img = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
+                if(i<30):
+                    output_path = os.path.join("sample", f'attack_sample_{i}.png')
+                    vutils.save_image(img, output_path, normalize=True)
+        print("done")
+        return img
 
     def p_sample_loop(
         self,

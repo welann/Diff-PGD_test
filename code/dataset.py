@@ -23,7 +23,7 @@ os.environ["PT_DATA_DIR"] = "data/datasets/"  # cifar-10
 DATASETS = ["imagenet", "imagenet32", "cifar10", "cifar10_vit"]
 
 
-def get_dataset(dataset: str, split: str) -> Dataset:
+def get_dataset(dataset: str, split: str) :
     """Return the dataset as a PyTorch Dataset object"""
     if dataset == "imagenet":
         return _imagenet(split)
@@ -146,7 +146,7 @@ def _cifar10vit(split: str) -> Dataset:
         raise Exception("Unknown split name.")
 
 
-def _imagenet(split: str) -> Dataset:
+def _imagenet(split: str) :
     # print(os.environ['IMAGENET_LOC_ENV'])
     # print(os.environ)
     # if not IMAGENET_LOC_ENV in os.environ.keys():

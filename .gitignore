@@ -4,3 +4,5 @@ model/
 .DS_Store
 *.pyc
 *.pt
+*.png
+*.bin

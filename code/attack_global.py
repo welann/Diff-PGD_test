@@ -14,6 +14,40 @@ import glob
 
 from attack_tools import gen_pgd_confs
 
+from datasets import load_dataset
+from torchvision.transforms import Compose, Resize, ToTensor, CenterCrop
+from torchvision.transforms.functional import normalize, resize, to_pil_image
+from torchvision.models import (
+    resnet18,
+    ResNet18_Weights,
+    resnet50,
+    ResNet50_Weights,
+    resnet101,
+    ResNet101_Weights,
+)
+import torchvision.utils as vutils
+
+
+def get_dataset_tinyimagenet(split="valid"):
+    ds = load_dataset("zh-plus/tiny-imagenet")
+    dataset = ds[split]
+    jitter = Compose(
+        [
+            Resize(224),
+            # CenterCrop(224),
+            ToTensor(),
+        ]
+    )
+
+    def transforms(examples):
+        examples["modified_image"] = [
+            jitter(image.convert("RGB")) for image in examples["image"]
+        ]
+        return examples
+
+    dataset.set_transform(transforms)
+    return dataset
+
 
 class Denoised_Classifier(torch.nn.Module):
     def __init__(self, diffusion, model, classifier, t):
@@ -31,15 +65,10 @@ class Denoised_Classifier(torch.nn.Module):
         x = x * 2 - 1
 
         t = torch.full((x.shape[0],), t).long().to(x.device)
-        print("sdedit x_t shape", x.shape)
-        print("t shape", t.shape)
-        print("=============")
         # 把正常图像加噪声，得到x_t
         x_t = self.diffusion.q_sample(x, t)
 
         sample = x_t
-        print("sdedit sample shape", sample.shape)
-        print("=============")
         # print(x_t.min(), x_t.max())
 
         # si(x_t, 'vis/noised_x.png', to_01=True)
@@ -52,7 +81,7 @@ class Denoised_Classifier(torch.nn.Module):
 
         for i in indices:
 
-            # out = self.diffusion.ddim_sample(self.model, sample, t) 
+            # out = self.diffusion.ddim_sample(self.model, sample, t)
             out = self.diffusion.ddim_sample(
                 self.model, sample, torch.full((x.shape[0],), i).long().to(x.device)
             )
@@ -108,8 +137,8 @@ def generate_x_adv_denoised_v2(x, y, diffusion, model, classifier, pgd_conf, dev
     net = Denoised_Classifier(diffusion, model, classifier, t)
 
     delta = torch.zeros(x.shape).to(x.device)
-    print("delta shape", delta.shape)
-    print("=============")
+    # print("delta shape", delta.shape)
+    # print("=============")
     # delta.requires_grad_()
 
     loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
@@ -138,8 +167,6 @@ def generate_x_adv_denoised_v2(x, y, diffusion, model, classifier, pgd_conf, dev
     print("Done")
 
     x_adv = torch.clamp(x + delta, 0, 1)
-    print("x_adv shape", x_adv.shape)
-    print("=============")
     return x_adv.detach()
 
 
@@ -307,29 +334,49 @@ def Attack_Global(
     classifier = classifier.to(device)
     classifier.eval()
 
-    dataset = get_dataset("imagenet", split="test")
-
+    # dataset = get_dataset("imagenet", split="test")
+    dataset = get_dataset_tinyimagenet()
     model, diffusion = get_imagenet_dm_conf(
         device=device, respace=respace, model_path=model_path
     )
+    
+    shape=(1,3,256,256)
+    torch.manual_seed(1)
+        
+    noise=torch.randn(*shape, device=device)
+    image = diffusion.attack_sample(model=model,shape=shape,noise=noise)
+    output_dir = './mycode/'
+    os.makedirs(output_dir, exist_ok=True)
 
-    c = 0
+    # 将图像张量保存为图像文件
+    output_path = os.path.join(output_dir, f'attack_sample.png')
+    vutils.save_image(image, output_path, normalize=True)
 
+    """c = 0
+    new_classifier=torchvision.models.resnet101(weights=ResNet101_Weights.DEFAULT)
+    new_classifier=new_classifier.to(device)
+    new_classifier.eval()
+        
+    total_num=0
+    success_num=0
     # for i in tqdm(range(dataset.__len__())):
-    for i in range(1000):
+    for i in range(10000):
         if i % skip != 0:
             continue
+        total_num+=1
         time_st = time.time()
         print(f"{c}/{dataset.__len__()//skip}")
 
-        x, y = dataset[i]
+
+        
+        # x, y = dataset[i]
+        x, y = dataset[i]["modified_image"], dataset[i]["label"]
         x = x[None,].to(device)
         y = torch.tensor(y)[None,].to(device)
-        print("first =============")
-        print("x shape", x.shape)
-        print("=============")
         y_pred = classifier(x).argmax(1)  # original prediction
 
+        x_cla_label=new_classifier(x).argmax(1)
+        
         if version == "v1":
             print("v1 not implemented")
             # x_adv = generate_x_adv_denoised(
@@ -373,18 +420,22 @@ def Attack_Global(
             "x_adv_diff": pred_x0,
         }
 
-        print("x_adv: ", x_adv.min(), x_adv.max(), (x - x_adv).abs().max())
-
+        # print("x_adv: ", x_adv.min(), x_adv.max(), (x - x_adv).abs().max())
+        
+        
         torch.save(pkg, save_path + f"{i}.bin")
         si(torch.cat([x, x_adv, pred_x0], -1), save_path + f"{i}.png")
         print(
-            "y_pred, x_adv, pred_x0: ",
-            y_pred,
-            classifier(x_adv).argmax(1),
-            classifier(pred_x0).argmax(1),
+            "x_cla_label, x_adv, pred_x0: ",
+            x_cla_label,
+            new_classifier(x_adv).argmax(1),
+            new_classifier(pred_x0).argmax(1),
         )
-
-        c += 1
+        if new_classifier(x_adv).argmax(1) != x_cla_label:
+            success_num+=1
+            
+        print(f"success_rate: {success_num/total_num}")
+        c += 1"""
 
 
 # Attack_Global('resnet101', 1, 'ddim100', t=2, eps=16, iter=1)
@@ -413,14 +464,14 @@ def Attack_Global(
 Attack_Global(
     "resnet50",
     0,
-    "/kaggle/working/models/256x256_diffusion_uncond.pt",
+    "/root/Diff-PGD_test/models/256x256_diffusion_uncond.pt",
     "ddim50",
     t=3,
     eps=16,
     iter=20,
     name="attack_global_gradpass",
     alpha=2,
-    version="v4",
+    version="v2",
 )
 # Attack_Global('resnet50', 0, 'ddim50', t=3, eps=16, iter=10, name='attack_global_gradpass', alpha=2)
 
